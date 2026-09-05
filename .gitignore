@@ -1,0 +1,42 @@
+# ===== 敏感凭据 =====
+# intervals.icu 账号凭据与 API Key（含明文，必须排除）
+userinfo.json
+*.userinfo.json
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.python-version
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ===== Node / 前端 =====
+node_modules/
+web/node_modules/
+web/dist/
+*.tsbuildinfo
+
+# ===== 运行时数据与密钥 =====
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite3
+.secret
+.env
+.env.*
+!.env.example
+
+# ===== IDE / 系统 =====
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
