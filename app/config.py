@@ -24,6 +24,9 @@ class Settings(BaseSettings):
 
     data_dir: Path = PROJECT_ROOT / "data"
 
+    # 启动后是否自动唤起浏览器（仅 dev 直接运行且非 reload 时生效）
+    open_browser: bool = True
+
     @property
     def db_path(self) -> Path:
         return self.data_dir / "sct.db"

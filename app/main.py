@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.staticfiles import StaticFiles
 
 from app.api import health, sync
@@ -31,6 +31,13 @@ app = FastAPI(
 
 app.include_router(health.router)
 app.include_router(sync.router)
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon_ico() -> Response:
+    # 页面已声明 favicon.svg；兼容个别浏览器对 /favicon.ico 的默认探测
+    return Response(status_code=204)
+
 
 # 同源前端静态页（Web 层引入 React 前的最小占位）
 app.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="static")
