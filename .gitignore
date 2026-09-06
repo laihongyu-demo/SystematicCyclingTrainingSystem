@@ -20,6 +20,8 @@ build/
 # ===== Node / 前端 =====
 node_modules/
 web/node_modules/
+web/.cache/
+web/.npm-cache/
 web/dist/
 *.tsbuildinfo
 

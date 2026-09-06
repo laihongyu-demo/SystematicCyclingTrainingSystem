@@ -6,13 +6,22 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Response
 from fastapi.staticfiles import StaticFiles
 
-from app.api import health, metrics, sync
+from app.api import activities, health, metrics, sync
 from app.config import settings
 from app.store.db import init_db
+
+
+def _frontend_dir() -> Path:
+    """同源页面目录：优先 React 生产构建 web/dist，缺省回退 M1 控制台静态页。"""
+    dist = settings.web_dist_dir
+    if (dist / "index.html").is_file():
+        return dist
+    return settings.static_dir
 
 
 @asynccontextmanager
@@ -32,6 +41,7 @@ app = FastAPI(
 app.include_router(health.router)
 app.include_router(sync.router)
 app.include_router(metrics.router)
+app.include_router(activities.router)
 
 
 @app.get("/favicon.ico", include_in_schema=False)
@@ -40,5 +50,5 @@ def favicon_ico() -> Response:
     return Response(status_code=204)
 
 
-# 同源前端静态页（Web 层引入 React 前的最小占位）
-app.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="static")
+# 同源前端：优先 React 构建产物（web/dist），否则回退 M1 控制台静态页
+app.mount("/", StaticFiles(directory=_frontend_dir(), html=True), name="static")

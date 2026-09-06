@@ -136,6 +136,39 @@ def test_weekly_summary(session):
     assert w2["load"] == 70.0
 
 
+def test_day_aggregate_and_activities_desc(session):
+    svc = MetricsService(session)
+    session.add_all(
+        [
+            _act(
+                "a1", "2026-09-07T08:00:00", ctl=30.0, atl=40.0,
+                load=50.0, distance_m=20000.0, moving_time_s=3600,
+            ),
+            _act(
+                "b1", "2026-09-07T18:00:00", ctl=31.5, atl=44.0,
+                load=20.0, distance_m=5000.0, moving_time_s=1200,
+            ),
+            _act(
+                "a2", "2026-09-14T08:00:00", ctl=33.0, atl=50.0,
+                load=70.0, distance_m=30000.0, moving_time_s=5400,
+            ),
+        ]
+    )
+    session.commit()
+
+    days = svc.day_aggregate("2026-09-01", "2026-09-30")
+    assert [d["date"] for d in days] == ["2026-09-07", "2026-09-14"]
+    d7 = days[0]
+    assert d7["activities"] == 2
+    assert d7["load"] == 70.0 and d7["distance_km"] == 25.0 and d7["moving_min"] == 80
+
+    res = svc.activities("2026-09-01", "2026-09-30")
+    assert res["total"] == 3
+    assert res["items"][0]["start_date_local"].startswith("2026-09-14")
+    assert res["items"][0]["tsb"] == -17.0
+    assert res["items"][0]["moving_min"] == 90
+
+
 def test_overview_current_is_last_smooth_point(session):
     svc = MetricsService(session)
     session.add(_act("a1", "2026-09-04T08:00:00", ctl=33.0, atl=50.0, load=70.0))

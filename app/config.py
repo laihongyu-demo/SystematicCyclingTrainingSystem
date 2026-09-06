@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     def static_dir(self) -> Path:
         return PROJECT_ROOT / "app" / "static"
 
+    @property
+    def web_dist_dir(self) -> Path:
+        # React 前端生产构建产物（web/dist），存在时作为根页面来源
+        return PROJECT_ROOT / "web" / "dist"
+
     def ensure_dirs(self) -> None:
         for p in (self.data_dir, self.encryption_key_file.parent, self.library_dir):
             p.mkdir(parents=True, exist_ok=True)

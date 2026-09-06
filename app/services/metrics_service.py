@@ -115,6 +115,39 @@ class MetricsService:
             out.append(a)
         return out
 
+    # ---------- 按日聚合（日历热力） ----------
+    def day_aggregate(self, oldest: str, newest: str) -> list[dict]:
+        rows = self._rows(oldest, newest)
+        days: dict[str, dict] = defaultdict(
+            lambda: {"date": "", "activities": 0, "load": 0.0, "distance_km": 0.0, "moving_min": 0}
+        )
+        for row in rows:
+            d = _local_date(row.start_date_local)
+            if d is None:
+                continue
+            a = days[d.isoformat()]
+            a["date"] = d.isoformat()
+            a["activities"] += 1
+            if row.training_load:
+                a["load"] += row.training_load
+            if row.distance_m:
+                a["distance_km"] += row.distance_m / 1000.0
+            if row.moving_time_s:
+                a["moving_min"] += round(row.moving_time_s / 60)
+        out = []
+        for a in days.values():
+            a["load"] = round(a["load"], 1)
+            a["distance_km"] = round(a["distance_km"], 1)
+            out.append(a)
+        return sorted(out, key=lambda x: x["date"])
+
+    # ---------- 活动列表（倒序） ----------
+    def activities(self, oldest: str, newest: str, limit: int = 200) -> dict:
+        rows = list(reversed(self._rows(oldest, newest)))
+        total = len(rows)
+        items = [_activity_summary(row) for row in rows[:limit]]
+        return {"total": total, "items": items}
+
     # ---------- 概览 ----------
     def overview(self, days: int = 90) -> dict:
         newest = datetime.now(UTC).date()
@@ -134,6 +167,31 @@ class MetricsService:
                 "load": round(sum(w["load"] for w in weeks), 1),
             },
         }
+
+
+def _activity_summary(row: ActivityMirror) -> dict:
+    return {
+        "id": row.id,
+        "name": row.name,
+        "type": row.type,
+        "start_date_local": row.start_date_local,
+        "distance_km": round(row.distance_m / 1000.0, 1) if row.distance_m else None,
+        "moving_min": int(row.moving_time_s / 60) if row.moving_time_s else None,
+        "elevation_gain_m": row.elevation_gain_m,
+        "average_heartrate": row.average_heartrate,
+        "max_heartrate": row.max_heartrate,
+        "average_cadence": row.average_cadence,
+        "weighted_avg_watts": row.weighted_avg_watts,
+        "training_load": row.training_load,
+        "trimp": row.trimp,
+        "ctl": row.ctl,
+        "atl": row.atl,
+        "tsb": round(row.ctl - row.atl, 1)
+        if row.ctl is not None and row.atl is not None
+        else None,
+        "trainer": row.trainer,
+        "device_name": row.device_name,
+    }
 
 
 def _num(value: object) -> float | None:
