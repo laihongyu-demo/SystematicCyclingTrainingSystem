@@ -32,7 +32,11 @@ def raw_act(aid: str, hr: int) -> dict:
 
 def client_for(items: list[dict]) -> IntervalsClient:
     def handler(request: httpx.Request) -> httpx.Response:
-        assert "activities" in str(request.url)
+        url = str(request.url)
+        if "wellness" in url:
+            # G2 Bug1：同步同时拉取每日官方 CTL/ATL，此处 mock 返回空集
+            return httpx.Response(200, json=[], request=request)
+        assert "activities" in url
         return httpx.Response(200, json=items, request=request)
 
     return IntervalsClient("test-key", transport=httpx.MockTransport(handler))

@@ -36,6 +36,7 @@ export interface ActivityItem {
   average_heartrate: number | null;
   max_heartrate: number | null;
   average_cadence: number | null;
+  average_watts: number | null;
   weighted_avg_watts: number | null;
   training_load: number | null;
   trimp: number | null;

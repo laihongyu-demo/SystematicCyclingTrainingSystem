@@ -43,11 +43,21 @@ export default function OverviewCards({
 
   return (
     <div className="cards">
-      <StatCard label="CTL 当前体能" value={fmtNum(ctl, 1)} cls="ctl" foot="较前日衰减推演" />
-      <StatCard label="ATL 当前疲劳" value={fmtNum(atl, 1)} cls="atl" />
+      <StatCard
+        label="CTL 当前体能"
+        value={fmtNum(ctl, 0)}
+        cls="ctl"
+        foot={ctl !== null ? `官方每日值 ${fmtNum(ctl, 2)}` : undefined}
+      />
+      <StatCard
+        label="ATL 当前疲劳"
+        value={fmtNum(atl, 0)}
+        cls="atl"
+        foot={atl !== null ? `官方每日值 ${fmtNum(atl, 2)}` : undefined}
+      />
       <StatCard
         label="TSB 状态分"
-        value={fmtNum(tsb, 1)}
+        value={fmtNum(tsb, 0)}
         cls="tsb"
         foot={tsb !== null ? (tsb >= 0 ? "偏恢复" : "偏疲劳") : undefined}
       />

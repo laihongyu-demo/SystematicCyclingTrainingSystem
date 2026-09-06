@@ -1,7 +1,7 @@
 """同步 API（M1-5）：手动触发活动同步 + 最近同步状态查询。"""
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -20,6 +20,7 @@ from app.services.credential_service import CredentialService
 from app.services.sync_service import DEFAULT_DAYS, SyncService
 from app.store.db import get_db
 from app.utils.crypto import load_or_create_key
+from app.utils.dates import local_today
 
 router = APIRouter(prefix="/api")
 Db = Annotated[Session, Depends(get_db)]
@@ -50,10 +51,8 @@ def sync_status(session: Db) -> dict:
 
 @router.post("/sync/activities")
 def run_activity_sync(payload: SyncRequest, session: Db) -> dict:
-    newest = payload.newest or datetime.now(UTC).date().isoformat()
-    oldest = payload.oldest or (
-        datetime.now(UTC).date() - timedelta(days=DEFAULT_DAYS)
-    ).isoformat()
+    newest = payload.newest or local_today().isoformat()
+    oldest = payload.oldest or (local_today() - timedelta(days=DEFAULT_DAYS)).isoformat()
     client = _client_for(session)
     try:
         return SyncService(session, client).sync_activities(oldest, newest)

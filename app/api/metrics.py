@@ -1,7 +1,7 @@
 """指标 API（M2-1）：体能曲线 / 周负荷汇总 / 概览。"""
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -9,13 +9,14 @@ from sqlalchemy.orm import Session
 
 from app.services.metrics_service import MetricsService
 from app.store.db import get_db
+from app.utils.dates import local_today
 
 router = APIRouter(prefix="/api/metrics")
 Db = Annotated[Session, Depends(get_db)]
 
 
 def _default_window(days: int) -> tuple[str, str]:
-    newest = datetime.now(UTC).date()
+    newest = local_today()
     return (newest - timedelta(days=days)).isoformat(), newest.isoformat()
 
 

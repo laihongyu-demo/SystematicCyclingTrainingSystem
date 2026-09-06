@@ -28,6 +28,7 @@ SOURCE_FIELDS: dict[str, str] = {
     "average_heartrate": "average_heartrate",
     "max_heartrate": "max_heartrate",
     "average_cadence": "average_cadence",
+    "average_watts": "icu_average_watts",
     "weighted_avg_watts": "icu_weighted_avg_watts",
     "max_speed": "max_speed",
     "average_speed": "average_speed",

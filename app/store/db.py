@@ -40,9 +40,23 @@ def get_db() -> Generator[Session, None, None]:
         yield session
 
 
+def _add_missing_columns() -> None:
+    """SQLite 轻量演进：为新加列做幂等 ALTER（暂未引入 alembic）。"""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    if "activity_mirror" not in inspector.get_table_names():
+        return
+    existing = {c["name"] for c in inspector.get_columns("activity_mirror")}
+    if "average_watts" not in existing:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE activity_mirror ADD COLUMN average_watts FLOAT"))
+
+
 def init_db() -> None:
     """建表入口（本地单机 SQLite，首启 create_all；后续引入 alembic 管理演进）。"""
     settings.ensure_dirs()
     from app import models  # noqa: F401  确保模型已注册
 
     Base.metadata.create_all(bind=engine)
+    _add_missing_columns()

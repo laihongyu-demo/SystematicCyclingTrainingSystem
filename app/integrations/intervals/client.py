@@ -91,3 +91,16 @@ class IntervalsClient:
         )
         assert isinstance(data, list)
         return data
+
+    def get_daily_fitness(self, oldest: str, newest: str) -> list[dict]:
+        """每日官方 CTL/ATL（wellness 日记录），用于镜像 intervals 体能口径。
+
+        仅请求 id/ctl/atl 三个字段；返回行形如 {"id": "YYYY-MM-DD", "ctl":.., "atl":..}。
+        """
+        data = self._request(
+            "GET",
+            "/athlete/0/wellness.json",
+            params={"oldest": oldest, "newest": newest, "fields": "id,ctl,atl"},
+        )
+        assert isinstance(data, list)
+        return data

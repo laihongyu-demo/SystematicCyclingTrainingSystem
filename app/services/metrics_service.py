@@ -1,22 +1,24 @@
 """指标汇总服务（M2-1）：周负荷汇总 + CTL/ATL/TSB 曲线。
 
-口径（确定性统计，与 intervals.icu 一致）：
-- 体能指标以 intervals 每活动完成后的官方快照 icu_ctl/icu_atl 为锚点
-  （来自远端计算，含历史积累），因此“工作日”数值与官网零误差；
-- TSB = CTL - ATL（intervals 定义）；
-- 曲线 mode="smooth" 时，非活动日从最近锚点按标准指数衰减推演
-  （CTL τ=42d、ATL τ=7d），活动日仍被官方锚点覆盖，供图表连续展示。
+口径（G2 Bug1 修复后，与 intervals.icu 零误差）：
+- 体能数值以 intervals.icu 每日官方快照为准（wellness 日记录 -> daily_fitness）。
+  官方已含“活动日计入当日负荷、非活动日按口径衰减、进行中当日为实时值”，
+  直接镜像官网数字，无需本地复算；
+- 缺失日（本地快照窗口未覆盖时）才在相邻锚点间按标准指数衰减补全
+  （CTL τ=42d、ATL τ=7d）；
+- points 模式 = 每活动日官方快照（icu_ctl/icu_atl），TSB = CTL - ATL。
 """
 from __future__ import annotations
 
 import math
 from collections import defaultdict
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import ActivityMirror
+from app.models import ActivityMirror, DailyFitness
+from app.utils.dates import local_today
 
 CTL_TAU_DAYS = 42.0
 ATL_TAU_DAYS = 7.0
@@ -39,6 +41,14 @@ class MetricsService:
             )
         )
 
+    def _daily_rows(self, oldest: str, newest: str) -> dict[date, DailyFitness]:
+        rows = self._session.scalars(
+            select(DailyFitness).where(
+                DailyFitness.date >= oldest, DailyFitness.date <= newest
+            )
+        ).all()
+        return {date.fromisoformat(r.date): r for r in rows}
+
     # ---------- 体能曲线 ----------
     def fitness_series(
         self, oldest: str, newest: str, mode: str = "smooth"
@@ -52,24 +62,39 @@ class MetricsService:
             d = _local_date(row.start_date_local)
             if d is not None:
                 per_day[d] = row
-        if not per_day:
+        daily: dict[date, DailyFitness] = self._daily_rows(oldest, newest)
+        if not per_day and not daily:
             return []
 
         if mode == "points":
             return [_point(d, per_day[d], include_load=True) for d in sorted(per_day)]
 
-        # smooth：逐日推演，活动日用官方锚点覆盖；延续到窗口最新日期
-        days = sorted(per_day)
-        end = max(days[-1], date.fromisoformat(newest))
+        # smooth：以官方每日值为骨架，缺失日用相邻锚点衰减补全，
+        # 活动日无每日记录时退回活动快照；延续到窗口最新日期。
+        known_days = set(per_day) | set(daily)
+        start = min(known_days)
+        end = max(max(known_days), date.fromisoformat(newest))
         out: list[dict] = []
         current_ctl: float | None = None
         current_atl: float | None = None
-        cursor = days[0]
+        cursor = start
         while cursor <= end:
+            fit = daily.get(cursor)
             row = per_day.get(cursor)
-            if row is not None:
-                current_ctl = _num(row.ctl)
-                current_atl = _num(row.atl)
+            if fit is not None:
+                ctl_v = _num(fit.ctl)
+                atl_v = _num(fit.atl)
+                if ctl_v is not None:
+                    current_ctl = ctl_v
+                if atl_v is not None:
+                    current_atl = atl_v
+            elif row is not None:
+                ctl_v = _num(row.ctl)
+                atl_v = _num(row.atl)
+                if ctl_v is not None:
+                    current_ctl = ctl_v
+                if atl_v is not None:
+                    current_atl = atl_v
             elif current_ctl is not None and current_atl is not None:
                 current_ctl *= math.exp(-1.0 / CTL_TAU_DAYS)
                 current_atl *= math.exp(-1.0 / ATL_TAU_DAYS)
@@ -150,7 +175,7 @@ class MetricsService:
 
     # ---------- 概览 ----------
     def overview(self, days: int = 90) -> dict:
-        newest = datetime.now(UTC).date()
+        newest = local_today()
         oldest = newest - timedelta(days=days)
         smooth = self.fitness_series(oldest.isoformat(), newest.isoformat(), "smooth")
         points = self.fitness_series(oldest.isoformat(), newest.isoformat(), "points")
@@ -181,6 +206,7 @@ def _activity_summary(row: ActivityMirror) -> dict:
         "average_heartrate": row.average_heartrate,
         "max_heartrate": row.max_heartrate,
         "average_cadence": row.average_cadence,
+        "average_watts": row.average_watts,
         "weighted_avg_watts": row.weighted_avg_watts,
         "training_load": row.training_load,
         "trimp": row.trimp,

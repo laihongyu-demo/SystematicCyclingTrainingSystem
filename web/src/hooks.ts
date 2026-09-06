@@ -67,10 +67,23 @@ export function fmtDate(dateStr: string | null | undefined, withYear = false): s
 
 export function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return "—";
-  const d = new Date(iso);
+  // 后端日志以 UTC 存储（SQLite 读出为无时区串）；按 UTC 解析后统一渲染为
+  // 运动员时区 Asia/Shanghai 的墙钟时间，避免受运行机器时区影响。
+  const hasTz = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(iso.trim());
+  const d = new Date(hasTz ? iso.trim() : `${iso.trim()}Z`);
   if (Number.isNaN(d.getTime())) return iso;
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  const p = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(d); // e.g. "2026-09-06, 15:27"
+  const m = p.match(/^(\d{4}-\d{2}-\d{2})[^ ]* (\d{2}):(\d{2})/);
+  if (!m) return p;
+  return `${m[1].slice(5)} ${m[2]}:${m[3]}`;
 }
 
 export function fmtDuration(min: number | null | undefined): string {

@@ -37,6 +37,7 @@ class ActivityMirror(Base):
     average_heartrate: Mapped[float | None] = mapped_column(Float)
     max_heartrate: Mapped[float | None] = mapped_column(Float)
     average_cadence: Mapped[float | None] = mapped_column(Float)
+    average_watts: Mapped[float | None] = mapped_column(Float)  # AP：intervals icu_average_watts
     weighted_avg_watts: Mapped[float | None] = mapped_column(Float)
     max_speed: Mapped[float | None] = mapped_column(Float)
     average_speed: Mapped[float | None] = mapped_column(Float)

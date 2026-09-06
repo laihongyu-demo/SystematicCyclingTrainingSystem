@@ -13,10 +13,14 @@ import CalendarHeatmap from "./components/CalendarHeatmap";
 import SyncControl from "./components/SyncControl";
 import { FitnessChart, LegendChips, WeeklyBars } from "./components/charts";
 
+// 时间范围与 intervals.icu 节奏对齐：7天/1月/42天/3月/6月/1年
 const RANGES = [
-  { days: 30, label: "30天" },
-  { days: 60, label: "60天" },
-  { days: 90, label: "90天" },
+  { days: 7, label: "7天" },
+  { days: 30, label: "1月" },
+  { days: 42, label: "42天" },
+  { days: 90, label: "3月" },
+  { days: 180, label: "6月" },
+  { days: 365, label: "1年" },
 ];
 
 function Panel({
