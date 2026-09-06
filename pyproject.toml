@@ -1,0 +1,18 @@
+[project]
+name = "sct"
+version = "0.1.0"
+description = "Systematic Cycling Training System (SCT) - 系统化骑行训练系统"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
