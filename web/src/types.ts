@@ -103,3 +103,53 @@ export interface SyncLogEntry {
 export interface SyncStatusResponse {
   recent: SyncLogEntry[];
 }
+
+// ---------- M2.5 指标与健康中心 ----------
+
+export interface Capability {
+  ftp: number | null;
+  ftp_synced: string | null;
+  eftp: number | null;
+  eftp_date: string | null;
+  weight_kg: number | null;
+  weight_source: "wellness" | "athlete_profile" | null;
+  weight_date: string | null;
+  w_per_kg: number | null;
+}
+
+export interface HealthDay {
+  date: string;
+  has_data: boolean;
+  resting_rhr: number | null;
+  hrv: number | null;
+  hrv_sdnn: number | null;
+  weight: number | null;
+  fat_percent: number | null;
+}
+
+export interface HealthDailyResponse {
+  window: Window;
+  covered_days: number;
+  days: HealthDay[];
+}
+
+export interface MorningRhrItem {
+  date: string;
+  value: number;
+  note: string | null;
+  source: string;
+  updated_at: string | null;
+  prev_date: string | null;
+  delta: number | null; // 与“日历上一天”的记录差；无昨日记录为 null
+}
+
+export interface MorningRhrResponse {
+  window: Window;
+  items: MorningRhrItem[];
+}
+
+export interface MorningRhrResult {
+  status: "created" | "updated" | "conflict";
+  date?: string;
+  existing?: { date: string; value: number };
+}

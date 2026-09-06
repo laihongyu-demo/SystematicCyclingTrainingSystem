@@ -11,7 +11,7 @@ from pathlib import Path
 from fastapi import FastAPI, Response
 from fastapi.staticfiles import StaticFiles
 
-from app.api import activities, health, metrics, sync
+from app.api import activities, health, metrics, sync, wellness
 from app.config import settings
 from app.store.db import init_db
 
@@ -42,6 +42,7 @@ app.include_router(health.router)
 app.include_router(sync.router)
 app.include_router(metrics.router)
 app.include_router(activities.router)
+app.include_router(wellness.router)
 
 
 @app.get("/favicon.ico", include_in_schema=False)

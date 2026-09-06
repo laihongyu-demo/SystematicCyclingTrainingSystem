@@ -266,13 +266,20 @@ flowchart LR
 
 | 任务ID | 任务 | 负责 Agent | 产出物 | 依赖 | 风险 | DoD |
 | --- | --- | --- | --- | --- | --- | --- |
-| M2.5-1 | 同步扩展：wellness 每日健康字段（HRV/体重/体脂/RHR）+ 档案 FTP/eFTP/体重（w/kg）入库 | INTG/BACK | `daily_health` 入库 + 档案扩展 | M2 全 | icu 字段口径 | 与 intervals.icu 值一致、幂等二次同步无变化（睡眠族另列 CHG-005） |
-| M2.5-2 | 晨起 RHR：手动录入 + 列表 API（按天，1 条/天；测量规范：清晨清醒后持续 5 分钟取最终值） | BACK | `morning_rhr` 表 + 录入/查询 API | M2.5-1 | 录入冲突 | 仅本地存储、幂等（同天覆盖需确认）、接口含昨日差值计算 |
-| M2.5-3 | 指标区前端：CTL/ATL/TSB（直读 icu）+ FTP/eFTP/w/kg 指标卡 | FRONT | 指标区 UI | M2.5-1 | — | 数值与 intervals.icu 一致；w/kg=FTP/体重口径一致；eFTP 无官方值显「—」 |
-| M2.5-4 | 健康看板：以**天为粒度**展示健康指标（HRV/体重/体脂/RHR 等，供可视化与 LLM 数据源） | FRONT | 健康日视图 | M2.5-1 | 缺失日处理 | 按天渲染、缺口日留空/标注未同步 |
-| M2.5-5 | RHR 对比标签：icu 原始 RHR（全天监控，不含睡眠）与晨起 RHR **同标签展示**：当前值 + 各自与**上一天差值**徽章 + 近 7/14 天**双线迷你趋势**，含「今日晨起 RHR 录入」入口 | FRONT | 对比标签组件 | M2.5-2/3/4 | 昨差口径（数据缺失日） | 差值正确、无昨日数据标注不误报 0；迷你趋势可渲染；录入入口可用 |
-| M2.5-6 | LLM 数据源接入：指标/健康日数据进入上下文构建器（供后续 M3 分析） | BACK | context 字段 | M2.5-1~4 | Token 预算 | 有界字段白名单、聚合后入上下文 |
+| M2.5-1 | 同步扩展：wellness 每日健康字段（HRV/体重/体脂/RHR）+ 档案 FTP/eFTP/体重（w/kg）入库 | INTG/BACK | `daily_health` 入库 + 档案扩展 | M2 全 | icu 字段口径 | 与 intervals.icu 值一致、幂等二次同步无变化（睡眠族另列 CHG-005）（已完成 2026-09-06） |
+| M2.5-2 | 晨起 RHR：手动录入 + 列表 API（按天，1 条/天；测量规范：清晨清醒后持续 5 分钟取最终值） | BACK | `morning_rhr` 表 + 录入/查询 API | M2.5-1 | 录入冲突 | 仅本地存储、幂等（同天覆盖需确认）、接口含昨日差值计算（已完成 2026-09-06） |
+| M2.5-3 | 指标区前端：CTL/ATL/TSB（直读 icu）+ FTP/eFTP/w/kg 指标卡 | FRONT | 指标区 UI | M2.5-1 | — | 数值与 intervals.icu 一致；w/kg=FTP/体重口径一致；eFTP 无官方值显「—」（已完成 2026-09-06） |
+| M2.5-4 | 健康看板：以**天为粒度**展示健康指标（HRV/体重/体脂/RHR 等，供可视化与 LLM 数据源） | FRONT | 健康日视图 | M2.5-1 | 缺失日处理 | 按天渲染、缺口日留空/标注未同步（已完成 2026-09-06） |
+| M2.5-5 | RHR 对比标签：icu 原始 RHR（全天监控，不含睡眠）与晨起 RHR **同标签展示**：当前值 + 各自与**上一天差值**徽章 + 近 7/14 天**双线迷你趋势**，含「今日晨起 RHR 录入」入口 | FRONT | 对比标签组件 | M2.5-2/3/4 | 昨差口径（数据缺失日） | 差值正确、无昨日数据标注不误报 0；迷你趋势可渲染；录入入口可用（已完成 2026-09-06） |
+| M2.5-6 | LLM 数据源接入：指标/健康日数据进入上下文构建器（供后续 M3 分析） | BACK | context 字段 | M2.5-1~4 | Token 预算 | 有界字段白名单、聚合后入上下文（已完成 2026-09-06） |
 | — | **Gate M2.5 评审** | HUM | 通过记录 | M2.5 全 | — | M2.5 放行后再启动 M3 |
+
+**M2.5 实现状态（2026-09-06，切片已落地，待 Gate M2.5 HUM 验收）**：
+- **数据层**：新增 `daily_health`（date 主键，RHR/HRV/HRV_SDNN/体重/体脂，source=icu）、`morning_rhr`（date 主键，晨起 RHR 本地手动，按天 1 条）、`athlete`（档案镜像：sportSettings/体重/display_name）；`activity_mirror` 增 `rolling_ftp`（icu_rolling_ftp 快照）。同步扩展为一次 wellness 拉取同写体能+健康双表，并镜像 athlete 档案；幂等（二次同步 health/fitness 增改均为 0）。
+- **服务/API**：`GET /api/metrics/capability`（FTP=sportSettings 骑行 ftp；eFTP=最新骑行 icu_rolling_ftp，无则「—」；体重 wellness 优先→档案快照；w/kg=FTP÷体重）；`GET /api/metrics/context?days=`（M3 白名单快照）；`/api/wellness/daily`（天粒度含 covered_days 与缺口标注）；`/api/wellness/morning-rhr` GET/POST/PUT/DELETE（同天覆盖返回 409 需 overwrite=true，昨日差与“日历上一天”比较、无昨日数据 delta=null）。
+- **前端**：概览卡下方新增「能力指标」Panel（FTP/eFTP/w·kg⁻¹ 卡，含来源与日期脚注）；日历区后新增「健康中心」Panel：RHR 对比页签（icu 原始 RHR 与晨起 RHR 双 StatCard + 昨差徽章、7/14/30/90 天窗口、双线 SVG 迷你趋势 gap 断线、今日晨起录入表单含 409 覆盖二次确认）+ 健康看板页签（天粒度表格，缺口行半透明）；随同步完成后一并刷新。
+- **证据**：pytest 39 项通过；`tsc --noEmit` 与 `vite build` 通过；dev server 重启后新端点 live 200（capability / context / wellness-daily / morning-rhr），浏览器页面自动请求新端点全部 200。
+- **待验收提示**：真实库中 athlete/每日健康/rolling_ftp 需在页面执行一次「立即同步」回填（此前真实数据由旧版同步产生，不含健康字段），随后 FTP/eFTP/wkg 与健康看板即有数值。
 
 ### M3 AI 分析对话（W7–W8：顺延至 M2.5 完成并通过 Gate M2.5 后启动）
 
@@ -368,7 +375,7 @@ flowchart LR
 | CHG-001 | 2026-09-06 | 本地启动 `python -m scripts.dev` 后未自动唤起浏览器 | 仅启动体验；涉及 dev 入口 | 已实现：默认启动后 1.2s 自动打开，`SCT_OPEN_BROWSER=0` 可关闭（reload 模式不自动打开） |
 | CHG-002 | 2026-09-06 | 浏览器请求 `/favicon.ico` 返回 404 | 无功能影响 | 已处理：新增 `favicon.svg` 并在页面声明；`/favicon.ico` 返回 204 |
 | CHG-003 | 2026-09-06 | UI 风格改进：简洁扁平 + light/dark 主题支持 | 前端样式层（现 index.html、后续 React Web） | **待排期**：建议随 M6 或 Web 层引入时实施，优先 P2；当前 M1 控制台样式可先用 |
-| CHG-004 | 2026-09-06 | M2.5 指标与健康中心：CTL/ATL/TSB 直读 icu；新增 FTP/eFTP/w/kg；健康日数据（HRV/体重/体脂/RHR）；RHR 与晨起 RHR 同标签对比+昨日差+双线迷你趋势 | 指标区/健康看板/同步扩展/上下文（见设计文档 §2.2 FR-2.1、§12 M2.5） | **已排期 M2.5**（W5–W6）：HUM 决策 M3 顺延，先落地本需求；eFTP 仅镜像 icu（无则「—」）；晨起 RHR 仅本地存储 |
+| CHG-004 | 2026-09-06 | M2.5 指标与健康中心：CTL/ATL/TSB 直读 icu；新增 FTP/eFTP/w/kg；健康日数据（HRV/体重/体脂/RHR）；RHR 与晨起 RHR 同标签对比+昨日差+双线迷你趋势 | 指标区/健康看板/同步扩展/上下文（见设计文档 §2.2 FR-2.1、§12 M2.5） | **已实现（W5–W6 切片，2026-09-06）**：HUM 决策 M3 顺延先落地本需求；eFTP 仅镜像 icu（无则「—」）；晨起 RHR 仅本地存储；pytest 39 / tsc / vite build 通过，待 Gate M2.5 HUM 验收 |
 | CHG-005 | 2026-09-06 | 睡眠字段族（时长/深睡/REM/得分等）健康展示与 LLM 接入 | icu sleep 字段多、口径杂，M2.5 首期不纳入 | **待排期**：M2.5 完成后单独排期（建议并入 M3/M4 间或 M6），不阻塞 M2.5 |
 | CHG-006 | 2026-09-06 | 用户生活习惯记录：手表佩戴习惯（→健康数据参考意义）、工作/休息时间（→训练计划制定）等，作为 **LLM 分析参数**之一 | 属 LLM 分析板块（FR-3.7/M3）：涉及用户资料存储与录入交互，且影响健康数据解读口径 | **标记：开发 M3 LLM 分析时再做具体研究**（录入字段/数据模型/注入方式待定），暂不排期 |
 

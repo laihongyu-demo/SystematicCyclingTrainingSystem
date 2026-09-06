@@ -10,18 +10,28 @@
 """
 from __future__ import annotations
 
+import json
 import math
 from collections import defaultdict
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import ActivityMirror, DailyFitness
+from app.models import (
+    ActivityMirror,
+    Athlete,
+    DailyFitness,
+    DailyHealth,
+    MorningRhr,
+)
 from app.utils.dates import local_today
 
 CTL_TAU_DAYS = 42.0
 ATL_TAU_DAYS = 7.0
+
+# 骑行运动类型集合：capability(eFTP) 与能力卡相关口径均以骑行运动为准
+RIDE_TYPES = ("Ride", "VirtualRide", "MountainBikeRide", "GravelRide")
 
 
 class MetricsService:
@@ -193,6 +203,205 @@ class MetricsService:
             },
         }
 
+    # ---------- 能力指标（M2.5 FR-2.1.2） ----------
+    def capability(self) -> dict:
+        """FTP / eFTP / w·kg⁻¹ 能力指标（含口径与取数时间）。
+
+        - FTP：intervals 档案 sportSettings 中骑行运动（Ride/VirtualRide…）的 ftp 设置；
+        - eFTP：intervals 官方滚动估算（icu_rolling_ftp），取最近一次骑行活动快照，
+          无则返回 None（前端显示「—」，注明未提供）；
+        - w/kg：FTP ÷ 体重；体重优先取最新 wellness 日值（daily_health），
+          无 wellness 时退回档案快照，并回传来源与日期。
+        """
+        athlete = self._session.scalars(
+            select(Athlete).order_by(Athlete.last_synced_at.desc()).limit(1)
+        ).first()
+        ftp = None
+        ftp_synced = None
+        if athlete is not None:
+            ftp = _cycling_ftp(athlete.sport_settings_json)
+            ftp_synced = _local_date_str(athlete.last_synced_at)
+
+        # eFTP：最近一次骑行活动的 icu_rolling_ftp
+        eftp = eftp_date = None
+        latest = self._session.scalars(
+            select(ActivityMirror)
+            .where(
+                ActivityMirror.type.in_(RIDE_TYPES),
+                ActivityMirror.rolling_ftp.is_not(None),
+            )
+            .order_by(ActivityMirror.start_date_local.desc())
+            .limit(1)
+        ).first()
+        if latest is not None:
+            eftp = round(latest.rolling_ftp, 1)
+            eftp_date = (latest.start_date_local or "")[:10] or None
+
+        # 体重：最新 wellness 日值优先，其次档案快照
+        weight = None
+        weight_source = None
+        weight_date = None
+        health_row = self._session.scalars(
+            select(DailyHealth)
+            .where(DailyHealth.weight.is_not(None))
+            .order_by(DailyHealth.date.desc())
+            .limit(1)
+        ).first()
+        if health_row is not None:
+            weight = round(health_row.weight, 1)
+            weight_source = "wellness"
+            weight_date = health_row.date
+        elif athlete is not None and athlete.weight is not None:
+            weight = round(athlete.weight, 1)
+            weight_source = "athlete_profile"
+            weight_date = ftp_synced
+
+        wkg = round(ftp / weight, 2) if ftp is not None and weight else None
+        return {
+            "ftp": ftp,
+            "ftp_synced": ftp_synced,
+            "eftp": eftp,
+            "eftp_date": eftp_date,
+            "weight_kg": weight,
+            "weight_source": weight_source,
+            "weight_date": weight_date,
+            "w_per_kg": wkg,
+        }
+
+    # ---------- 健康日序列（M2.5 FR-2.1.3，按天粒度） ----------
+    def health_daily(self, oldest: str, newest: str) -> dict:
+        """健康看板天粒度数据：窗口内逐日（缺口日置空，标注 covered）。
+
+        字段为 M2.5-1 spike 实测的 wellness 镜像：RHR / HRV / HRV_SDNN / 体重 / 体脂。
+        """
+        rows = self._session.scalars(
+            select(DailyHealth)
+            .where(DailyHealth.date >= oldest, DailyHealth.date <= newest)
+            .order_by(DailyHealth.date)
+        ).all()
+        by_day = {r.date: r for r in rows}
+        start = date.fromisoformat(oldest)
+        end = date.fromisoformat(newest)
+        days: list[dict] = []
+        covered = 0
+        cursor = start
+        while cursor <= end:
+            day = cursor.isoformat()
+            row = by_day.get(day)
+            has = row is not None and any(
+                getattr(row, col) is not None
+                for col in ("resting_rhr", "hrv", "hrv_sdnn", "weight", "fat_percent")
+            )
+            if has:
+                covered += 1
+            days.append(
+                {
+                    "date": day,
+                    "has_data": has,
+                    "resting_rhr": _num(row.resting_rhr) if has else None,
+                    "hrv": _num(row.hrv) if has else None,
+                    "hrv_sdnn": _num(row.hrv_sdnn) if has else None,
+                    "weight": _num(row.weight) if has else None,
+                    "fat_percent": _num(row.fat_percent) if has else None,
+                }
+            )
+            cursor += timedelta(days=1)
+        return {
+            "window": {"oldest": oldest, "newest": newest},
+            "covered_days": covered,
+            "days": days,
+        }
+
+    # ---------- 晨起 RHR（M2.5 FR-2.1.4，手动录入） ----------
+    def morning_rhr_series(self, oldest: str, newest: str) -> dict:
+        """晨起 RHR 记录（按天 1 条）。delta 只与“日历上一天”的记录比较，
+        无昨日数据则 delta 为 None（前端标注「无昨日数据」，不误报 0）。"""
+        rows = self._session.scalars(
+            select(MorningRhr)
+            .where(MorningRhr.date >= oldest, MorningRhr.date <= newest)
+            .order_by(MorningRhr.date)
+        ).all()
+        by_day = {r.date: r for r in rows}
+        items: list[dict] = []
+        for r in rows:
+            prev = by_day.get((date.fromisoformat(r.date) - timedelta(days=1)).isoformat())
+            items.append(
+                {
+                    "date": r.date,
+                    "value": r.value,
+                    "note": r.note,
+                    "source": r.source,
+                    "updated_at": _fmt_utc(r.updated_at),
+                    "prev_date": prev.date if prev else None,
+                    "delta": round(r.value - prev.value, 1) if prev else None,
+                }
+            )
+        return {"window": {"oldest": oldest, "newest": newest}, "items": items}
+
+    def morning_rhr_upsert(
+        self,
+        day: str,
+        value: float,
+        note: str | None = None,
+        *,
+        overwrite: bool = False,
+    ) -> dict:
+        """按天写入/覆盖晨起 RHR；同天已有且未显式 overwrite 时返回 conflict。
+
+        返回值 status ∈ created | updated | conflict。
+        """
+        existing = self._session.get(MorningRhr, day)
+        if existing is not None and not overwrite:
+            return {
+                "status": "conflict",
+                "existing": {"date": existing.date, "value": existing.value},
+            }
+        if existing is None:
+            self._session.add(MorningRhr(date=day, value=value, note=note))
+            status = "created"
+        else:
+            existing.value = value
+            existing.note = note
+            status = "updated"
+        self._session.commit()
+        return {"status": status, "date": day}
+
+    def morning_rhr_delete(self, day: str) -> bool:
+        row = self._session.get(MorningRhr, day)
+        if row is None:
+            return False
+        self._session.delete(row)
+        self._session.commit()
+        return True
+
+    # ---------- LLM 数据源白名单（M2.5-6 / FR-3.4，供 M3 上下文构建器） ----------
+    def context_snapshot(self, days: int = 30) -> dict:
+        """把指标+健康以“天粒度、有界字段白名单”聚合，供 M3 上下文构建器注入。
+
+        - 体能：窗口内官方 CTL/ATL/TSB 平滑曲线（截取每日值）＋当前值；
+        - 健康：窗口内 RHR/HRV/体重（缺口标注，无插值）；
+        - 晨起 RHR 最近条目；能力指标取档（FTP/eFTP/w·kg⁻¹）。
+        """
+        newest = local_today()
+        oldest = newest - timedelta(days=days - 1)
+        lo, hi = oldest.isoformat(), newest.isoformat()
+
+        smooth = self.fitness_series(lo, hi, "smooth")
+        current = smooth[-1] if smooth else None
+
+        health = self.health_daily(lo, hi)
+        morning = self.morning_rhr_series(lo, hi)
+
+        return {
+            "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "window": {"oldest": lo, "newest": hi},
+            "current_fitness": current,
+            "capability": self.capability(),
+            "health_days": health["days"],
+            "health_covered_days": health["covered_days"],
+            "morning_rhr": morning["items"],
+        }
+
 
 def _activity_summary(row: ActivityMirror) -> dict:
     return {
@@ -236,6 +445,50 @@ def _local_date(value: str | None) -> date | None:
 def _next_day(value: str) -> str:
     d = date.fromisoformat(value) + timedelta(days=1)
     return f"{d.isoformat()}T00:00:00"
+
+
+def _cycling_ftp(sport_settings_json: str | None) -> float | None:
+    """从 athlete 档案 sportSettings 提取骑行 FTP 设置。
+
+    intervals.icu 的 sportSettings 每项含 types 列表（如 ['Ride','VirtualRide']）
+    与 ftp/indoor_ftp；骑行运动设置里的 ftp 即指标卡口径。异常 JSON 或缺骑行项返回 None。
+    """
+    if not sport_settings_json:
+        return None
+    try:
+        items = json.loads(sport_settings_json)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(items, list):
+        return None
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        types = item.get("types") or []
+        if isinstance(types, list) and any(t in RIDE_TYPES for t in types):
+            return _num(item.get("ftp"))
+    # 无 types 匹配时退回首个数字型 ftp
+    for item in items:
+        if isinstance(item, dict) and item.get("ftp") is not None:
+            return _num(item["ftp"])
+    return None
+
+
+def _local_date_str(value: datetime | None) -> str | None:
+    """把存储时间戳按运动员本地时区（UTC+8）转成 YYYY-MM-DD。"""
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return (value + timedelta(hours=8)).strftime("%Y-%m-%d")
+
+
+def _fmt_utc(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _point(

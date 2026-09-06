@@ -2,31 +2,48 @@
 import type {
   ActivitiesResponse,
   CalendarResponse,
+  Capability,
   FitnessResponse,
+  HealthDailyResponse,
+  MorningRhrResponse,
+  MorningRhrResult,
   OverviewResponse,
   SyncLogEntry,
   SyncStatusResponse,
   WeeklyResponse,
 } from "./types";
 
-export class ApiError extends Error {}
+export class ApiError extends Error {
+  status: number | null;
+  constructor(message: string, status: number | null = null) {
+    super(message);
+    this.status = status;
+  }
+}
 
-async function getJSON<T>(url: string): Promise<T> {
+async function readBody(res: Response): Promise<string> {
+  let detail = `HTTP ${res.status} ${res.statusText}`;
+  try {
+    const body = (await res.json()) as { detail?: unknown };
+    if (body.detail !== undefined) detail = String(body.detail);
+  } catch {
+    /* 保留默认错误信息 */
+  }
+  return detail;
+}
+
+async function request<T>(url: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(url, { headers: { Accept: "application/json" } });
+    res = await fetch(url, {
+      headers: { Accept: "application/json", ...(init?.body ? { "Content-Type": "application/json" } : {}) },
+      ...init,
+    });
   } catch {
     throw new ApiError("无法连接后端服务，请确认 FastAPI 已在 127.0.0.1:8000 启动");
   }
   if (!res.ok) {
-    let detail = `HTTP ${res.status} ${res.statusText}`;
-    try {
-      const body = (await res.json()) as { detail?: unknown };
-      if (body.detail !== undefined) detail = String(body.detail);
-    } catch {
-      /* 保留默认错误信息 */
-    }
-    throw new ApiError(detail);
+    throw new ApiError(await readBody(res), res.status);
   }
   return (await res.json()) as T;
 }
@@ -39,28 +56,20 @@ export const api = {
   activities: (days: number, limit = 100) =>
     getJSON<ActivitiesResponse>(`/api/activities?days=${days}&limit=${limit}`),
   syncStatus: () => getJSON<SyncStatusResponse>("/api/sync/status"),
+  capability: () => getJSON<Capability>("/api/metrics/capability"),
+  healthDaily: (days: number) => getJSON<HealthDailyResponse>(`/api/wellness/daily?days=${days}`),
+  morningRhr: (days: number) => getJSON<MorningRhrResponse>(`/api/wellness/morning-rhr?days=${days}`),
+  morningRhrSave: (payload: { date: string; value: number; note?: string | null; overwrite?: boolean }) =>
+    request<MorningRhrResult>("/api/wellness/morning-rhr", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 };
 
+async function getJSON<T>(url: string): Promise<T> {
+  return request<T>(url);
+}
+
 export async function runSync(): Promise<SyncLogEntry> {
-  let res: Response;
-  try {
-    res = await fetch("/api/sync/activities", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: "{}",
-    });
-  } catch {
-    throw new ApiError("无法连接后端服务，同步失败");
-  }
-  if (!res.ok) {
-    let detail = `HTTP ${res.status} ${res.statusText}`;
-    try {
-      const body = (await res.json()) as { detail?: unknown };
-      if (body.detail !== undefined) detail = String(body.detail);
-    } catch {
-      /* 保留默认错误信息 */
-    }
-    throw new ApiError(detail);
-  }
-  return (await res.json()) as SyncLogEntry;
+  return request<SyncLogEntry>("/api/sync/activities", { method: "POST", body: "{}" });
 }

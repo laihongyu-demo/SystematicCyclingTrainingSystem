@@ -73,3 +73,18 @@ def overview(
     days: int = Query(default=90, ge=7, le=730),
 ) -> dict:
     return MetricsService(session).overview(days)
+
+
+@router.get("/capability")
+def capability(session: Db) -> dict:
+    """M2.5 能力指标：FTP/eFTP/w·kg⁻¹（含取数时间与来源口径，FR-2.1.2）。"""
+    return MetricsService(session).capability()
+
+
+@router.get("/context")
+def llm_context(
+    session: Db,
+    days: int = Query(default=30, ge=7, le=90),
+) -> dict:
+    """M2.5-6 LLM 数据源白名单（供 M3 上下文构建器）：指标+健康天粒度有界快照。"""
+    return MetricsService(session).context_snapshot(days)

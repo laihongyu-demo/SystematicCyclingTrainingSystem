@@ -48,9 +48,12 @@ def _add_missing_columns() -> None:
     if "activity_mirror" not in inspector.get_table_names():
         return
     existing = {c["name"] for c in inspector.get_columns("activity_mirror")}
-    if "average_watts" not in existing:
-        with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE activity_mirror ADD COLUMN average_watts FLOAT"))
+    for column in ("average_watts", "rolling_ftp"):
+        if column not in existing:
+            with engine.begin() as conn:
+                conn.execute(
+                    text(f"ALTER TABLE activity_mirror ADD COLUMN {column} FLOAT")
+                )
 
 
 def init_db() -> None:

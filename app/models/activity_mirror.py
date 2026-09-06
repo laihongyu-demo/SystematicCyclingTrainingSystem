@@ -39,6 +39,7 @@ class ActivityMirror(Base):
     average_cadence: Mapped[float | None] = mapped_column(Float)
     average_watts: Mapped[float | None] = mapped_column(Float)  # AP：intervals icu_average_watts
     weighted_avg_watts: Mapped[float | None] = mapped_column(Float)
+    rolling_ftp: Mapped[float | None] = mapped_column(Float)  # icu_rolling_ftp：当前 eFTP 参考
     max_speed: Mapped[float | None] = mapped_column(Float)
     average_speed: Mapped[float | None] = mapped_column(Float)
     calories: Mapped[int | None] = mapped_column(Integer)

@@ -92,15 +92,19 @@ class IntervalsClient:
         assert isinstance(data, list)
         return data
 
-    def get_daily_fitness(self, oldest: str, newest: str) -> list[dict]:
-        """每日官方 CTL/ATL（wellness 日记录），用于镜像 intervals 体能口径。
+    def get_daily_wellness(self, oldest: str, newest: str) -> list[dict]:
+        """每日官方体能+健康快照（wellness 日记录）。
 
-        仅请求 id/ctl/atl 三个字段；返回行形如 {"id": "YYYY-MM-DD", "ctl":.., "atl":..}。
+        字段（M2.5-1 spike 实测）：
+        - 体能：ctl/atl（官方每日 CTL/ATL，含当天实时值）；
+        - 健康：restingHR（icu 原始 RHR）、hrv/hrvSDNN、weight、bodyFat（体重/体脂）。
+        返回行形如 {"id": "YYYY-MM-DD", "ctl":.., "atl":.., "restingHR":.., ...}。
         """
+        fields = "id,ctl,atl,restingHR,hrv,hrvSDNN,weight,bodyFat"
         data = self._request(
             "GET",
             "/athlete/0/wellness.json",
-            params={"oldest": oldest, "newest": newest, "fields": "id,ctl,atl"},
+            params={"oldest": oldest, "newest": newest, "fields": fields},
         )
         assert isinstance(data, list)
         return data

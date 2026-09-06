@@ -3,11 +3,14 @@ import type { ReactNode } from "react";
 import type {
   ActivitiesResponse,
   CalendarResponse,
+  Capability,
   FitnessResponse,
   OverviewResponse,
 } from "./types";
 import { useFetch } from "./hooks";
 import OverviewCards from "./components/OverviewCards";
+import CapabilityCards from "./components/CapabilityCards";
+import HealthCenter from "./components/HealthCenter";
 import ActivityList from "./components/ActivityList";
 import CalendarHeatmap from "./components/CalendarHeatmap";
 import SyncControl from "./components/SyncControl";
@@ -68,12 +71,17 @@ export default function App() {
     () => `/api/activities?days=${days}&limit=200`,
     [days],
   );
+  const capability = useFetch<Capability>(() => "/api/metrics/capability", []);
+  // 同步完成后递增，通知 HealthCenter（内部自治窗口）一并刷新
+  const [syncNonce, setSyncNonce] = useState(0);
 
   const reloadAll = useCallback(() => {
     overview.reload();
     fitness.reload();
     calendar.reload();
     activities.reload();
+    capability.reload();
+    setSyncNonce((n) => n + 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -141,6 +149,12 @@ export default function App() {
         </section>
 
         <section className="section">
+          <Panel title="能力指标" hint="FTP / eFTP / 功率体重比（来源：intervals 档案设置与官方滚动估算）">
+            <CapabilityCards data={capability.data} loading={capability.loading} error={capability.error} />
+          </Panel>
+        </section>
+
+        <section className="section">
           <div className="charts-grid">
             <Panel title="体能曲线" hint="CTL/ATL/TSB 逐日推演">
               {fitness.error ? (
@@ -181,6 +195,10 @@ export default function App() {
               <div className="empty-hint">窗口内暂无训练记录（需先完成同步）</div>
             )}
           </Panel>
+        </section>
+
+        <section className="section">
+          <HealthCenter reloadKey={syncNonce} />
         </section>
 
         <section className="section">

@@ -596,3 +596,98 @@ a.link:hover {
   width: 15px;
   height: 15px;
 }
+
+/* ---------- M2.5 能力指标 ---------- */
+.stat-card .value .unit {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-left: 4px;
+  letter-spacing: 0.2px;
+}
+
+/* ---------- M2.5 健康中心 ---------- */
+/* 昨日差值徽章：RHR 上升暖色警示 / 下降恢复 / 持平灰 */
+.tag.delta-up {
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
+  color: var(--danger);
+}
+
+.tag.delta-down {
+  background: color-mix(in srgb, var(--ok) 15%, transparent);
+  color: var(--ok);
+}
+
+.tag.delta-flat {
+  background: var(--surface-3);
+  color: var(--text-dim);
+}
+
+.rhr-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.entry-form {
+  margin-top: 14px;
+  border-top: 1px dashed var(--border);
+  padding-top: 12px;
+}
+
+.entry-form .entry-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.entry-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.entry-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.entry-row input {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  color-scheme: light dark;
+}
+
+.entry-row input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.entry-row input[type="number"] {
+  width: 96px;
+}
+
+.entry-row input[type="date"] {
+  min-width: 142px;
+}
+
+.entry-row input[type="text"] {
+  min-width: 210px;
+}
+
+@media (max-width: 640px) {
+  .entry-row {
+    align-items: stretch;
+  }
+  .entry-row label {
+    flex: 1 1 100%;
+  }
+}
