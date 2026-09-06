@@ -6,7 +6,7 @@
 - 只读端点 /api/v1/athlete/0 返回个人信息；/athlete/0/activities 返回完成活动概要。
 
 用法：.venv\\Scripts\\python scripts\\spike_intervals_auth.py [--no-net]
-凭据从仓库根 userinfo.json 读取（该文件已被 gitignore，不入库），全程不打印明文。
+凭据从 data/userinfo.json 读取（data/ 整体已被 gitignore，不入库），全程不打印明文。
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ BASE = "https://intervals.icu/api/v1"
 
 
 def load_creds() -> tuple[str, str]:
-    cfg = json.loads((ROOT / "userinfo.json").read_text(encoding="utf-8"))
+    cfg = json.loads((ROOT / "data" / "userinfo.json").read_text(encoding="utf-8"))
     return cfg["userid"], cfg["API_Key"]
 
 

@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from app.api import health
+from app.api import health, sync
 from app.config import settings
 from app.store.db import init_db
 
@@ -30,6 +30,7 @@ app = FastAPI(
 )
 
 app.include_router(health.router)
+app.include_router(sync.router)
 
 # 同源前端静态页（Web 层引入 React 前的最小占位）
 app.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="static")

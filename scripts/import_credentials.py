@@ -20,9 +20,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main() -> int:
     init_db()
-    src = ROOT / "userinfo.json"
+    src = settings.data_dir / "userinfo.json"
     if not src.exists():
-        print("缺少 userinfo.json（该文件已在 .gitignore，仅限本机）。")
+        print("缺少 data/userinfo.json（data/ 已在 .gitignore，仅限本机）。")
         return 1
     info = json.loads(src.read_text(encoding="utf-8"))
     userid = str(info.get("userid", "")).strip()
