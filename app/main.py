@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Response
 from fastapi.staticfiles import StaticFiles
 
-from app.api import health, sync
+from app.api import health, metrics, sync
 from app.config import settings
 from app.store.db import init_db
 
@@ -31,6 +31,7 @@ app = FastAPI(
 
 app.include_router(health.router)
 app.include_router(sync.router)
+app.include_router(metrics.router)
 
 
 @app.get("/favicon.ico", include_in_schema=False)
