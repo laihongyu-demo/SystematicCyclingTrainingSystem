@@ -304,6 +304,11 @@ flowchart LR
 - **M3-3 SSE + 前端**：`/api/chat/stream` + `conversation/message` 持久化 + 「AI 对话」页（App 视图切换、打字机、会话列表、结构化卡片）；
 - **校验**：pytest 全量（含新 mock）/ tsc / vite build / Ollama 真实烟雾 / 页面打字机冒烟；更新看板与进度表后提交；**G3**。
 
+**M3-1a spike 结论（2026-09-07，本地 mock OpenAI 兼容端点实测，3 种 usage 形态）**：
+- 契约：`/v1/chat/completions` 非流式取 `choices[0].message.content` + `usage`；流式为 SSE `data:` chunk（`delta.content` 逐块累积、`finish_reason=stop` chunk 收尾，`include_usage=true` 时末尾追加 `choices:[]` 的 usage chunk，随后 `[DONE]`）；`response_format={type:json_object}` 时 content 为 JSON 字符串需二次 `json.loads`。
+- **usage 归一化映射**：OpenAI `cached=prompt_tokens_details.cached_tokens`、`uncached=prompt_tokens−cached`；DeepSeek `cached=prompt_cache_hit_tokens`、`uncached=prompt_cache_miss_tokens`；Ollama `/v1` 仅 `prompt/completion_tokens`（无缓存细分 → `cached=0, uncached=prompt`）；归一化字段统一 `{input_cached, input_uncached, output}` → 直写 `llm_usage_call`（FR-8 C/U/O）。
+- Ollama 真实烟雾留待 **M3-1b**（本地已就绪监听 11434，需先有模型）；错误分类（HTTP 401/429/5xx → 类别）随客户端层在 M3-1b 落实。
+
 ### M4 计划编排与写回（P0 核心；**启动日期：Gate G3 通过后重排，原 W7–W9 日期随 M3 顺延失效**）
 
 | 任务ID | 任务 | 负责 Agent | 产出物 | 依赖 | 风险 | DoD |
