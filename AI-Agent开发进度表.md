@@ -272,16 +272,16 @@ flowchart LR
 | M2.5-4 | 健康看板：以**天为粒度**展示健康指标（HRV/体重/体脂/RHR 等，供可视化与 LLM 数据源） | FRONT | 健康日视图 | M2.5-1 | 缺失日处理 | 按天渲染、缺口日留空/标注未同步（已完成 2026-09-06） |
 | M2.5-5 | RHR 对比标签：icu 原始 RHR（全天监控，不含睡眠）与晨起 RHR **同标签展示**：当前值 + 各自与**上一天差值**徽章 + 近 7/14 天**双线迷你趋势**，含「今日晨起 RHR 录入」入口 | FRONT | 对比标签组件 | M2.5-2/3/4 | 昨差口径（数据缺失日） | 差值正确、无昨日数据标注不误报 0；迷你趋势可渲染；录入入口可用（已完成 2026-09-06） |
 | M2.5-6 | LLM 数据源接入：指标/健康日数据进入上下文构建器（供后续 M3 分析） | BACK | context 字段 | M2.5-1~4 | Token 预算 | 有界字段白名单、聚合后入上下文（已完成 2026-09-06） |
-| — | **Gate M2.5 评审** | HUM | 通过记录 | M2.5 全 | — | ✅ **已通过（2026-09-06 HUM 验收）**：「能力指标 + 健康中心（RHR 对比/录入/健康看板）」真实数据验证通过，放行启动 M3 |
+| — | **Gate M2.5 评审** | HUM | 通过记录 | M2.5 全 | — | ✅ **已通过（2026-09-22 HUM 验收）**：「能力指标 + 健康中心（RHR 对比/录入/健康看板）」真实数据验证通过，放行启动 M3 |
 
-**M2.5 实现状态（2026-09-06，切片已落地，Gate M2.5 HUM 已通过）**：
+**M2.5 实现状态（切片已落地；Gate M2.5 HUM 于 2026-09-22 验收通过）**：
 - **数据层**：新增 `daily_health`（date 主键，RHR/HRV/HRV_SDNN/体重/体脂，source=icu）、`morning_rhr`（date 主键，晨起 RHR 本地手动，按天 1 条）、`athlete`（档案镜像：sportSettings/体重/display_name）；`activity_mirror` 增 `rolling_ftp`（icu_rolling_ftp 快照）。同步扩展为一次 wellness 拉取同写体能+健康双表，并镜像 athlete 档案；幂等（二次同步 health/fitness 增改均为 0）。
 - **服务/API**：`GET /api/metrics/capability`（FTP=sportSettings 骑行 ftp；eFTP=最新骑行 icu_rolling_ftp，无则「—」；体重 wellness 优先→档案快照；w/kg=FTP÷体重）；`GET /api/metrics/context?days=`（M3 白名单快照）；`/api/wellness/daily`（天粒度含 covered_days 与缺口标注）；`/api/wellness/morning-rhr` GET/POST/PUT/DELETE（同天覆盖返回 409 需 overwrite=true，昨日差与“日历上一天”比较、无昨日数据 delta=null）。
 - **前端**：概览卡下方新增「能力指标」Panel（FTP/eFTP/w·kg⁻¹ 卡，含来源与日期脚注）；日历区后新增「健康中心」Panel：RHR 对比页签（icu 原始 RHR 与晨起 RHR 双 StatCard + 昨差徽章、7/14/30/90 天窗口、双线 SVG 迷你趋势 gap 断线、今日晨起录入表单含 409 覆盖二次确认）+ 健康看板页签（天粒度表格，缺口行半透明）；随同步完成后一并刷新。
 - **证据**：pytest 39 项通过；`tsc --noEmit` 与 `vite build` 通过；dev server 重启后新端点 live 200（capability / context / wellness-daily / morning-rhr），浏览器页面自动请求新端点全部 200。
-- **数据回填与验收**：真实库已执行真实同步回填（FTP 127 / eFTP 127 / 51kg / w·kg⁻¹ 2.49，近 60 天健康全覆盖，复跑幂等），HUM 于 2026-09-06 完成验收。CHG-004 已完成并关闭。
+- **数据回填与验收**：真实库已执行真实同步回填（FTP 127 / eFTP 127 / 51kg / w·kg⁻¹ 2.49，近 60 天健康全覆盖，复跑幂等），HUM 于 2026-09-22 完成验收。CHG-004 已完成并关闭。
 
-### M3 AI 分析对话（对应 FR-3，**启动 2026-09-07；Gate G3 通过后重排 M4/M6 日期**）
+### M3 AI 分析对话（对应 FR-3，**启动 2026-09-22；Gate G3 通过后重排 M4/M6 日期**）
 
 | 任务ID | 任务 | 负责 Agent | 产出物 | 依赖 | 风险 | DoD |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -294,7 +294,7 @@ flowchart LR
 | M3-7 | 生活习惯画像研究（CHG-006）：手表佩戴习惯/工作休息时间 → 数据模型、录入交互与上下文注入（健康口径提示）设计 | COORD/BACK | 设计记录 | M3-2 | 范围蔓延 | 输出「纳入 M3 后端字段 / 延后」建议；录入 UI 不属 M3 |
 | — | **Gate G3 评审** | HUM | 通过记录 | M3 全 | — | 对话闭环验收通过后放行 M4 |
 
-**M3 实现切片（2026-09-07 起；连通性验证路径＝mock 单测 + Ollama 本地，云端 API Key 到位后再补真实烟雾）**：
+**M3 实现切片（2026-09-22 起；连通性验证路径＝mock 单测 + Ollama 本地，云端 API Key 到位后再补真实烟雾）**：
 - **M3-1a spike**：实测 Ollama 与 OpenAI 兼容端点的 `/chat/completions`（流式 chunk / usage / json 结构化形态），敲定 adapter 契约与 usage 归一化字段；
 - **M3-1b 实现**：adapters + 凭据直读 + (provider, model) 选择 + `LLMClient` 唯一出口（内嵌 usage 归一化钩子，预埋 M3-5）；
 - **M3-5 用量采集**：接 LLMClient → 明细落库 + 日/小时聚合 + DeepSeek 价目种子（费用样例单测）；
@@ -304,7 +304,7 @@ flowchart LR
 - **M3-3 SSE + 前端**：`/api/chat/stream` + `conversation/message` 持久化 + 「AI 对话」页（App 视图切换、打字机、会话列表、结构化卡片）；
 - **校验**：pytest 全量（含新 mock）/ tsc / vite build / Ollama 真实烟雾 / 页面打字机冒烟；更新看板与进度表后提交；**G3**。
 
-**M3-1a spike 结论（2026-09-07，本地 mock OpenAI 兼容端点实测，3 种 usage 形态）**：
+**M3-1a spike 结论（2026-09-22，本地 mock OpenAI 兼容端点实测，3 种 usage 形态）**：
 - 契约：`/v1/chat/completions` 非流式取 `choices[0].message.content` + `usage`；流式为 SSE `data:` chunk（`delta.content` 逐块累积、`finish_reason=stop` chunk 收尾，`include_usage=true` 时末尾追加 `choices:[]` 的 usage chunk，随后 `[DONE]`）；`response_format={type:json_object}` 时 content 为 JSON 字符串需二次 `json.loads`。
 - **usage 归一化映射**：OpenAI `cached=prompt_tokens_details.cached_tokens`、`uncached=prompt_tokens−cached`；DeepSeek `cached=prompt_cache_hit_tokens`、`uncached=prompt_cache_miss_tokens`；Ollama `/v1` 仅 `prompt/completion_tokens`（无缓存细分 → `cached=0, uncached=prompt`）；归一化字段统一 `{input_cached, input_uncached, output}` → 直写 `llm_usage_call`（FR-8 C/U/O）。
 - Ollama 真实烟雾留待 **M3-1b**（本地已就绪监听 11434，需先有模型）；错误分类（HTTP 401/429/5xx → 类别）随客户端层在 M3-1b 落实。
@@ -393,15 +393,15 @@ flowchart LR
 | CHG-001 | 2026-09-06 | 本地启动 `python -m scripts.dev` 后未自动唤起浏览器 | 仅启动体验；涉及 dev 入口 | P2 | 已实现 | 默认启动后 1.2s 自动打开，`SCT_OPEN_BROWSER=0` 可关闭（reload 模式不自动打开） |
 | CHG-002 | 2026-09-06 | 浏览器请求 `/favicon.ico` 返回 404 | 无功能影响 | P2 | 已处理 | 新增 `favicon.svg` 并在页面声明；`/favicon.ico` 返回 204 |
 | CHG-003 | 2026-09-06 | UI 风格改进：简洁扁平 + light/dark 主题支持 | 前端样式层（现 index.html、后续 React Web） | P2 | 待排期 | 建议随 M6 或 Web 层引入时实施；当前 M1 控制台样式可先用 |
-| CHG-004 | 2026-09-06 | M2.5 指标与健康中心：CTL/ATL/TSB 直读 icu；新增 FTP/eFTP/w/kg；健康日数据（HRV/体重/体脂/RHR）；RHR 与晨起 RHR 同标签对比+昨日差+双线迷你趋势 | 指标区/健康看板/同步扩展/上下文（见设计文档 §2.2 FR-2.1、§12 M2.5） | P0 | 已完成 | W5–W6 切片（2026-09-06）：HUM 决策 M3 顺延先落地本需求；eFTP 仅镜像 icu（无则「—」）；晨起 RHR 仅本地存储；pytest 39 / tsc / vite build 通过；**Gate M2.5 HUM 验收通过（2026-09-06），已关闭** |
+| CHG-004 | 2026-09-06 | M2.5 指标与健康中心：CTL/ATL/TSB 直读 icu；新增 FTP/eFTP/w/kg；健康日数据（HRV/体重/体脂/RHR）；RHR 与晨起 RHR 同标签对比+昨日差+双线迷你趋势 | 指标区/健康看板/同步扩展/上下文（见设计文档 §2.2 FR-2.1、§12 M2.5） | P0 | 已完成 | W5–W6 切片（2026-09-06）：HUM 决策 M3 顺延先落地本需求；eFTP 仅镜像 icu（无则「—」）；晨起 RHR 仅本地存储；pytest 39 / tsc / vite build 通过；**Gate M2.5 HUM 验收通过（2026-09-22），已关闭** |
 | CHG-005 | 2026-09-06 | 睡眠字段族（时长/深睡/REM/得分等）健康展示与 LLM 接入 | icu sleep 字段多、口径杂，M2.5 首期不纳入 | P2 | 待排期 | M2.5 完成后单独排期（建议并入 M3/M4 间或 M6），不阻塞 M2.5 |
-| CHG-006 | 2026-09-06 | 用户生活习惯记录：手表佩戴习惯（→健康数据参考意义）、工作/休息时间（→训练计划制定）等，作为 **LLM 分析参数**之一 | 属 LLM 分析板块（FR-3.7/M3）：涉及用户资料存储与录入交互，且影响健康数据解读口径 | P1 | 进行中 | 并入 M3-7（2026-09-07 启动）：研究数据模型/录入交互/口径提示注入，产出「纳入 M3 后端字段/延后」建议；录入 UI 不属 M3 |
+| CHG-006 | 2026-09-06 | 用户生活习惯记录：手表佩戴习惯（→健康数据参考意义）、工作/休息时间（→训练计划制定）等，作为 **LLM 分析参数**之一 | 属 LLM 分析板块（FR-3.7/M3）：涉及用户资料存储与录入交互，且影响健康数据解读口径 | P1 | 进行中 | 并入 M3-7（2026-09-22 启动）：研究数据模型/录入交互/口径提示注入，产出「纳入 M3 后端字段/延后」建议；录入 UI 不属 M3 |
 | CHG-007 | 2026-09-06 | 健康中心增强：① 增加体重、体脂 StatCard，与 RHR 卡**同一行**并列展示；② RHR 走势图加**数据标签**用于数值对比（参考体能曲线做法）+ **Y 轴刻度线** | 健康中心 RHR 对比页签（HealthCenter/DualTrend、体重体脂最新值与趋势口径） | P2 | 待排期 | 项目完成度较高后优化；数据标签需防密集重叠，Y 轴刻度线复用体能曲线网格样式 |
 | CHG-008 | 2026-09-06 | 术语/命名标准化统一：指标标签（RHR、晨起 RHR、ATL、CTL、TSB 等）、各板块命名与骑行专业词汇重新统一；各字段单位（rpm、bpm、w、m、h、km）规范展示 | 全局 UI 文案与单位常量（前端展示层，涉及既有页面标签） | P1 | 待排期 | 具体改名映射待需求细节确认后统一实施 |
 | CHG-009 | 2026-09-06 | 数值显示全局约定：① 小数点取数逻辑——小数点后为 0 的显示为整数，有小数则**四舍五入取小数点后一位**；② 数值使用千分符（如系统已按该格式显示则忽略） | 前端数值格式化统一（`fmtNum` 及概览/能力/健康各卡片与图表调用点） | P1 | 待排期 | 需先盘点各卡片/图表取数精度差异再统一口径 |
 | CHG-010 | 2026-09-06 | 体能曲线折线图折线改为**平滑效果** | 前端图表渲染（charts.tsx 折线路径绘制） | P2 | 已合并 | 并入 CHG-012（范围由体能曲线扩展为全部折线图 + 图表风格可选） |
 | CHG-011 | 2026-09-06 | WebUI 系统托盘图标（Windows 右下角三角区）：托盘菜单提供**重启服务 / 退出服务**入口；研究「退出 WebUI = 后端服务关闭」的运行模型 | dev/运行入口（scripts.dev 与打包运行期生命周期；自动唤起浏览器已实现，见 CHG-001） | P2 | 待排期 | 先研究 tray + 前后端进程生命周期方案再实施 |
-| CHG-012 | 2026-09-07 | 折线图插补方式：由线性改为**平滑**（覆盖体能曲线、健康趋势等全部折线图）；并预留**图表风格自由选择**能力（如折线/平滑/面积/柱状等，供后续选择） | 前端图表渲染统一（charts.tsx、HealthCenter DualTrend 等折线绘制）；图表风格选择涉及偏好配置与组件参数化 | P2 | 待排期 | 不紧急，项目完成度较高后优化；先统一插补为平滑（可复用同一套路径算法），图表风格可选的整体方案（配置项/偏好存储/组件抽象）待需求细节确认 |
+| CHG-012 | 2026-09-22 | 折线图插补方式：由线性改为**平滑**（覆盖体能曲线、健康趋势等全部折线图）；并预留**图表风格自由选择**能力（如折线/平滑/面积/柱状等，供后续选择） | 前端图表渲染统一（charts.tsx、HealthCenter DualTrend 等折线绘制）；图表风格选择涉及偏好配置与组件参数化 | P2 | 待排期 | 不紧急，项目完成度较高后优化；先统一插补为平滑（可复用同一套路径算法），图表风格可选的整体方案（配置项/偏好存储/组件抽象）待需求细节确认 |
 
 > **状态取值**：`已处理` / `已实现` / `已完成` / `进行中` / `已排期` / `待排期` / `已合并`（仅填状态词，细节写「进度」列）。
 > **优先级**：`P0` 核心或阻塞当前里程碑；`P1` 重要（影响体验一致性或数据口径，尽早排）；`P2` 优化（项目完成度较高后或随 M6 一并处理）。
