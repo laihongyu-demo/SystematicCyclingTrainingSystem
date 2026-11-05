@@ -210,7 +210,7 @@ flowchart LR
 | G0 | 开工确认 | 第 0 周 | 技术栈/范围/里程碑日历确认 | HUM | 本进度表 + 设计文档定稿 |
 | G1 | 数据链路 | M1 末 | 真实账号同步可用性与凭据安全 | HUM + REV | 90 天同步通过、加密入库、无明文 |
 | G2 | 可视化 | M2 末 | 指标正确性 | HUM | CTL/ATL/TSB 与 intervals.icu ±1% |
-| G3 | AI 对话 | M3 末 | 对话与结构化输出质量 | HUM | 双 Provider 可用、SSE 稳定、输出 Schema 校验通过 |
+| G3 | AI 对话 | M3 末 | 对话与结构化输出质量 | HUM | 双 Provider 可用、SSE 稳定、输出 Schema 校验通过；**M3.5 工具通道可用且写工具默认关闭** |
 | G4 | 写回闭环（核心） | M4 末 | 推送/回读一致性 | HUM + REV | 幂等验证、冲突提示、回滚可用 |
 | G5 | 知识库 | M5 末 | 参考库检索质量 | HUM | 抽样卡片溯源命中、注入带引用 |
 | G6 | 冻结 | M6 前 | 全量回归与安全加固 | HUM + REV | 全量回归通过、安全自查清单通过 |
@@ -309,6 +309,23 @@ flowchart LR
 - **usage 归一化映射**：OpenAI `cached=prompt_tokens_details.cached_tokens`、`uncached=prompt_tokens−cached`；DeepSeek `cached=prompt_cache_hit_tokens`、`uncached=prompt_cache_miss_tokens`；Ollama `/v1` 仅 `prompt/completion_tokens`（无缓存细分 → `cached=0, uncached=prompt`）；归一化字段统一 `{input_cached, input_uncached, output}` → 直写 `llm_usage_call`（FR-8 C/U/O）。
 - Ollama 真实烟雾留待 **M3-1b**（本地已就绪监听 11434，需先有模型）；错误分类（HTTP 401/429/5xx → 类别）随客户端层在 M3-1b 落实。
 
+### M3.5 intervals.icu MCP 适配（CHG-013，对应 FR-10，2026-11-05 登记）
+
+> **定位**：把已接入的 `intervals-mcp-server` 0.1.0 从「开发期工具」升级为「受治理的产品工具面」，补齐凭证与依赖缺口。**不阻塞 M3 现有范围**，但**必须在 M4-3 推送联调前完成**（M4 依赖写前校验/写后回读）。无独立 Gate，验收并入 G3 前置检查。
+
+| 任务ID | 任务 | 负责 Agent | 产出物 | 依赖 | 风险 | DoD |
+| --- | --- | --- | --- | --- | --- | --- |
+| M3.5-1 | **MCP 网关骨架与依赖声明**：`MCPGateway`（stdio 会话、`list_tools` 握手、超时/熔断/降级）+ `mcp_call_log`；`requirements.txt` 声明 `intervals-mcp-server==0.1.0`、`mcp<2.0` | INTG/BACK | 网关 + 日志表 | M1-3/M3-1 | 子进程生命周期 | 3 个只读工具（events/wellness/activities）冒烟通过；服务不可用时主链路无感 |
+| M3.5-2 | **凭证与白名单**：启动器从加密 `credential` 注入 `API_KEY`/`ATHLETE_ID`；`config/mcp_tools.yaml` 定义工具级别与开关 | BACK | 启动器 + 白名单 | M3.5-1 | 明文残留 | 磁盘无新增明文；`userinfo_file` 仅显式开关可用；未声明工具默认拒绝并留痕 |
+| M3.5-3 | **归一化与 Agent 接入**：TZ-1 时区、单位、长度、来源标注（`MCPNormalizer`）；注册 `intervals.*` 工具，与 `sct.*` 隔离 | BACK/INTG | 归一化层 + 工具注册 | M3.5-1/M3-2 | 时区误读 | 时间字段 UTC→本地断言通过（活动/事件两口径）；单次注入 ≤8k tokens |
+| M3.5-4 | **写通道治理（默认关闭）**：运行时 W1/W2 关闭 + 审批单校验；`builder_text → workout_doc` 解析可行性验证 | BACK/INTG | 治理规则 + 验证报告 | M3.5-2 | 误写远端 | 无审批单写调用 100% 拒绝并留痕；解析结果与 REST 落库一致，否则明确「不启用 MCP 写」 |
+| M3.5-5 | **可观测与文档**：`/api/mcp` 下 status、tools、probe、calls；工具清单与升级回归清单 | BACK/COORD | 接口 + 文档 | M3.5-1 | 观测缺口 | 调用成功率与 p95 可查；升级回归清单可执行 |
+
+**M3.5 切片（M4 前）**：
+- **先只读**：M3.5-1/2/3 落地只读工具面 + 审计/降级，默认关闭全部写工具；
+- **再评估写**：M3.5-4 用真实课程样例验证 `builder_text → workout_doc` 保真度；通过则 M4 可选启用 `McpEventTransport`，否则写路径保持纯 REST（默认口径）；
+- **验收**：并入 G3 前置检查，检查项＝「工具通道可用、写工具默认关闭、TZ-1 断言通过」；证据附 pytest + 一次真实只读冒烟。
+
 ### M4 计划编排与写回（P0 核心；**启动日期：Gate G3 通过后重排，原 W7–W9 日期随 M3 顺延失效**）
 
 | 任务ID | 任务 | 负责 Agent | 产出物 | 依赖 | 风险 | DoD |
@@ -343,8 +360,8 @@ flowchart LR
 
 ### 关键路径与缓冲
 
-- **关键路径**：S0-3 → M1-2 → M1-3 → M3-1 → M3-3 → M4-1 → M4-3 → M6-5；
-- **缓冲策略**：M5（知识库）与 M6 允许与主线并行约半周；G4 为最大风险门禁，预留 1 周返工缓冲。
+- **关键路径**：S0-3 → M1-2 → M1-3 → M3-1 → M3-3 → **M3.5-1** → M4-1 → M4-3 → M6-5；
+- **缓冲策略**：M5（知识库）与 M6 允许与主线并行约半周；G4 为最大风险门禁，预留 1 周返工缓冲；M3.5 仅排只读工具面，写通道验证可并行于 M4-1/M4-2。
 
 ---
 
@@ -377,6 +394,8 @@ flowchart LR
 | 测试未随行导致假绿 | 中 | 质量失控 | TEST 独立执行 + DoD 附测试证据 | TEST |
 | 真实凭据误入代码/夹具 | 高 | 泄露 | 能力边界禁止项 + REV 检查单 + 预提交扫描 | REV/HUM |
 | 人类监督缺失导致 Gate 形同虚设 | 中 | 范围失控 | Gate 放行必须 HUM 显式确认并留痕 | HUM |
+| **MCP 时间字段时区歧义（UTC 无后缀）** | 高 | 结论整体偏移 8h、误判训练时段 | TZ-1 归一（无时区 `Date` 按 UTC 解析→Asia/Shanghai）+ 断言测试 + 结论前交叉校验（设计 §2.2 FR-10.5；已实际发生一次误判） | INTG/BACK |
+| **MCP 写工具绕过审批/误删远端** | 高 | 绕过 draft→approved→pushed，损坏日历 | 运行时禁 W2、W1 仅审批单；默认写路径仍为 REST；写调用审计 + 回读确认（设计 FR-10.4/10.6） | BACK/HUM |
 
 ---
 
@@ -402,6 +421,7 @@ flowchart LR
 | CHG-010 | 2026-09-06 | 体能曲线折线图折线改为**平滑效果** | 前端图表渲染（charts.tsx 折线路径绘制） | P2 | 已合并 | 并入 CHG-012（范围由体能曲线扩展为全部折线图 + 图表风格可选） |
 | CHG-011 | 2026-09-06 | WebUI 系统托盘图标（Windows 右下角三角区）：托盘菜单提供**重启服务 / 退出服务**入口；研究「退出 WebUI = 后端服务关闭」的运行模型 | dev/运行入口（scripts.dev 与打包运行期生命周期；自动唤起浏览器已实现，见 CHG-001） | P2 | 待排期 | 先研究 tray + 前后端进程生命周期方案再实施 |
 | CHG-012 | 2026-09-22 | 折线图插补方式：由线性改为**平滑**（覆盖体能曲线、健康趋势等全部折线图）；并预留**图表风格自由选择**能力（如折线/平滑/面积/柱状等，供后续选择） | 前端图表渲染统一（charts.tsx、HealthCenter DualTrend 等折线绘制）；图表风格选择涉及偏好配置与组件参数化 | P2 | 待排期 | 不紧急，项目完成度较高后优化；先统一插补为平滑（可复用同一套路径算法），图表风格可选的整体方案（配置项/偏好存储/组件抽象）待需求细节确认 |
+| CHG-013 | 2026-11-05 | 接入 intervals.icu MCP（`intervals-mcp-server` 0.1.0，stdio，20 工具）并完成设计适配：REST 数据面 + MCP 工具面双通道、工具白名单与 R0/R1/W1/W2 分级、TZ-1 时区归一、凭证改加密注入、`mcp_call_log` 审计与降级 | 设计文档 §2.2 FR-10、§5.4、§6.3、§7.4.1、§8.6、§9.5、§12 M3.5、§13.3；实现涉及 `app/integrations/mcp`、`app/services/mcp_gateway`、`config/mcp_tools.yaml`、`requirements.txt`、`scripts/run_intervals_mcp.py` | P1 | 已排期 | M3.5-1~5 排在 M4-3 推送联调前（不阻塞 M3 现有范围）：先只读工具面 + 审计/降级，写工具默认关闭；`builder_text→workout_doc` 保真度验证后再决定是否启用 MCP 写；验收并入 G3 前置检查 |
 
 > **状态取值**：`已处理` / `已实现` / `已完成` / `进行中` / `已排期` / `待排期` / `已合并`（仅填状态词，细节写「进度」列）。
 > **优先级**：`P0` 核心或阻塞当前里程碑；`P1` 重要（影响体验一致性或数据口径，尽早排）；`P2` 优化（项目完成度较高后或随 M6 一并处理）。
